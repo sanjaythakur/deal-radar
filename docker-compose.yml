@@ -1,17 +1,16 @@
 # Coolify deployment for Deal-Radar.
 #
-# Three services on a private compose network:
-#   - db       : Postgres 16. Holds campaigns + leads so they persist across
-#                deploys. Data lives on the named `dealradar-db` volume.
-#   - backend  : FastAPI (Crustdata + OpenAI proxy). NOT exposed publicly.
-#                Frontend reaches it via the docker network as `http://backend:8000`.
-#   - frontend : nginx serving the built Vite SPA. Reverse-proxies /api/* to
-#                the backend. This is the only service Coolify exposes externally.
+# Two services on a private compose network:
+#   - db   : Postgres 16. Holds campaigns + leads so they persist across
+#            deploys. Data lives on the named `dealradar-db` volume.
+#   - web  : Next.js app (App Router + route handlers). Serves the UI and
+#            owns the Crustdata + OpenAI keys via /api/* route handlers.
+#            This is the only service Coolify exposes externally.
 #
 # Coolify magic envs (do NOT set these by hand — Coolify fills them in):
-#   SERVICE_FQDN_FRONTEND  -> public domain Coolify provisions for the SPA.
-#                             You can override it in the Coolify UI to use your
-#                             own domain.
+#   SERVICE_FQDN_WEB  -> public domain Coolify provisions for the app.
+#                        You can override it in the Coolify UI to use your
+#                        own domain.
 #
 # Secrets you must set in the Coolify "Environment Variables" tab:
 #   CRUSTDATA_API_KEY
@@ -38,51 +37,32 @@ services:
       retries: 5
       start_period: 10s
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    expose:
-      - "8000"
-    environment:
-      CRUSTDATA_API_KEY: ${CRUSTDATA_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      # NOTE: Coolify's .env template parser doesn't support nested ${} interpolation,
-      # so this default is flat. If you override POSTGRES_USER / POSTGRES_PASSWORD /
-      # POSTGRES_DB in Coolify, also set DATABASE_URL to match.
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://dealradar:dealradar@db:5432/dealradar}
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
-  frontend:
+  web:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       # Coolify replaces this at deploy time with the generated/configured FQDN.
-      SERVICE_FQDN_FRONTEND: /
+      SERVICE_FQDN_WEB: /
+      CRUSTDATA_API_KEY: ${CRUSTDATA_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
+      # NOTE: Coolify's .env template parser doesn't support nested ${} interpolation,
+      # so this default is flat. If you override POSTGRES_USER / POSTGRES_PASSWORD /
+      # POSTGRES_DB in Coolify, also set DATABASE_URL to match.
+      DATABASE_URL: ${DATABASE_URL:-postgres://dealradar:dealradar@db:5432/dealradar}
     ports:
-      - "80"
+      - "3000"
     depends_on:
-      backend:
+      db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
 volumes:
   dealradar-db:

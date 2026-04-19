@@ -1,4 +1,5 @@
 node_modules/
+.next/
 dist/
 dist-ssr/
 build/
@@ -12,8 +13,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Don't ship the Python backend into the frontend image.
+# Old python backend (kept in repo only as historical reference; not used by Docker build).
 backend/
+src/
 
 # Local-only docs / phases / secrets.
 docs/

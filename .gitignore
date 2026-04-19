@@ -7,6 +7,7 @@ node_modules/
 dist/
 dist-ssr/
 build/
+.next/
 *.local
 
 # Vite cache
@@ -42,9 +43,6 @@ phases/
 # Secrets (raw notes)
 keys.md
 
-# Python backend
-backend/.venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/.env
-backend/*.pyc
+# Next.js
+.next/
+next-env.d.ts
