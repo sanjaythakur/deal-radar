@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load .env *before* importing modules that read env at import time.
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
+from campaigns import router as campaigns_router  # noqa: E402
 from crustdata import CrustdataError  # noqa: E402
 from llm import generate_outreach, parse_query, score_prospect  # noqa: E402
 from pipeline import fetch_web_signals, run_enrich  # noqa: E402
@@ -46,10 +47,12 @@ app = FastAPI(title="Deal-Radar backend", version="0.2.0")
 # hitting the API directly from curl/Postman during development.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(campaigns_router)
 
 
 def _http_from_runtime(e: Exception) -> HTTPException:

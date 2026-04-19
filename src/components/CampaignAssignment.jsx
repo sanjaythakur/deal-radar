@@ -35,12 +35,12 @@ export default function CampaignAssignment({
     selectedProspects.length > 0 &&
     ((mode === 'existing' && !!campaignId) || (mode === 'new' && newName.trim().length > 0));
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
     let targetId = campaignId;
     let targetName;
     if (mode === 'new') {
-      const created = onCreateCampaign(newName.trim());
+      const created = await onCreateCampaign(newName.trim());
       if (!created) return;
       targetId = created.id;
       targetName = created.name;
@@ -50,7 +50,7 @@ export default function CampaignAssignment({
     } else {
       targetName = campaigns.find((c) => c.id === targetId)?.name || '';
     }
-    onAddToCampaign(targetId, selectedProspects, provenanceContext);
+    await onAddToCampaign(targetId, selectedProspects, provenanceContext);
     const n = selectedProspects.length;
     showToast(`✓ ${n} ${n === 1 ? 'lead' : 'leads'} added to '${targetName}'`);
   };
