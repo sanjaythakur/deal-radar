@@ -50,7 +50,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dealradar}:${POSTGRES_PASSWORD:-dealradar}@db:5432/${POSTGRES_DB:-dealradar}}
+      # NOTE: Coolify's .env template parser doesn't support nested ${} interpolation,
+      # so this default is flat. If you override POSTGRES_USER / POSTGRES_PASSWORD /
+      # POSTGRES_DB in Coolify, also set DATABASE_URL to match.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://dealradar:dealradar@db:5432/dealradar}
     depends_on:
       db:
         condition: service_healthy
