@@ -48,3 +48,12 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/.env
 backend/*.pyc
+-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
