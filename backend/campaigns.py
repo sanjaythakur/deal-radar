@@ -45,8 +45,11 @@ class AddLeadsRequest(BaseModel):
 
 
 class UpdateLeadRequest(BaseModel):
+    prospect_id: str = Field(alias="prospectId")
     status: Optional[str] = None
     notes: Optional[str] = None
+
+    model_config = {"populate_by_name": True}
 
 
 class BulkStatusRequest(BaseModel):
@@ -78,6 +81,21 @@ def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _get_prospect_id(prospect: dict[str, Any]) -> str:
+    """Stable id for a prospect. Kept in sync with ``src/lib/prospectId.js``."""
+    if not prospect:
+        return ""
+    if prospect.get("profile_url"):
+        return prospect["profile_url"]
+    if prospect.get("prospectId"):
+        return prospect["prospectId"]
+    name = prospect.get("name") or ""
+    company = prospect.get("company") or ""
+    if name and company:
+        return f"{name}|{company}"
+    return name
+
+
 def _adapt_prospect_to_lead(
     prospect: dict[str, Any],
     provenance_context: Optional[dict[str, Any]],
@@ -89,7 +107,7 @@ def _adapt_prospect_to_lead(
     lead = dict(prospect)
     lead.update(
         {
-            "prospectId": prospect.get("name"),
+            "prospectId": _get_prospect_id(prospect),
             "name": prospect.get("name"),
             "title": prospect.get("title", "") or "",
             "company": prospect.get("company", "") or "",
@@ -158,7 +176,7 @@ async def add_leads(campaign_id: str, req: AddLeadsRequest) -> dict[str, Any]:
     additions = [
         _adapt_prospect_to_lead(p, req.provenance_context)
         for p in req.prospects
-        if p and p.get("name") and p.get("name") not in existing_ids
+        if p and _get_prospect_id(p) and _get_prospect_id(p) not in existing_ids
     ]
     if additions:
         await col.update_one(
@@ -169,9 +187,9 @@ async def add_leads(campaign_id: str, req: AddLeadsRequest) -> dict[str, Any]:
     return _serialize(updated)
 
 
-@router.patch("/{campaign_id}/leads/{prospect_id}")
+@router.post("/{campaign_id}/lead-update")
 async def update_lead(
-    campaign_id: str, prospect_id: str, req: UpdateLeadRequest
+    campaign_id: str, req: UpdateLeadRequest
 ) -> dict[str, Any]:
     if req.status is None and req.notes is None:
         raise HTTPException(status_code=400, detail="Nothing to update")
@@ -185,7 +203,7 @@ async def update_lead(
 
     col = campaigns_collection()
     result = await col.update_one(
-        {"_id": campaign_id, "leads.prospectId": prospect_id},
+        {"_id": campaign_id, "leads.prospectId": req.prospect_id},
         {"$set": set_fields},
     )
     if result.matched_count == 0:

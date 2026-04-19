@@ -1,3 +1,5 @@
+import { getProspectId } from '../lib/prospectId.js';
+
 function scoreStyle(score) {
   if (score >= 70) {
     return 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 text-[var(--color-accent)]';
@@ -20,7 +22,10 @@ export default function ProspectTable({
   const selSet = selectedIds || new Set();
   const assignedSet = assignedIds || new Set();
   const total = prospects.length;
-  const selectedCount = prospects.reduce((n, p) => (selSet.has(p.name) ? n + 1 : n), 0);
+  const selectedCount = prospects.reduce(
+    (n, p) => (selSet.has(getProspectId(p)) ? n + 1 : n),
+    0,
+  );
   const allChecked = total > 0 && selectedCount === total;
   const someChecked = selectedCount > 0 && !allChecked;
 
@@ -77,12 +82,13 @@ export default function ProspectTable({
           </thead>
           <tbody>
             {prospects.map((p, i) => {
-              const isSelected = selectedId === p.name;
-              const isChecked = selSet.has(p.name);
-              const isAssigned = assignedSet.has(p.name);
+              const pid = getProspectId(p);
+              const isSelected = selectedId === pid;
+              const isChecked = selSet.has(pid);
+              const isAssigned = assignedSet.has(pid);
               return (
                 <tr
-                  key={p.name}
+                  key={pid}
                   style={{ animationDelay: `${i * 70}ms` }}
                   className={`group border-b border-[var(--color-border)]/60 last:border-b-0 transition animate-[fadeSlide_0.35s_ease-out_both] ${
                     isAssigned ? 'border-l-2 border-l-[var(--color-accent)]' : ''
@@ -93,7 +99,7 @@ export default function ProspectTable({
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={() => onToggleSelect(p.name)}
+                        onChange={() => onToggleSelect(pid)}
                         aria-label={`Select ${p.name}`}
                         className="accent-[var(--color-accent)] h-3.5 w-3.5"
                       />

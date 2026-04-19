@@ -8,6 +8,7 @@ import Nav from './components/Nav.jsx';
 import CampaignAssignment from './components/CampaignAssignment.jsx';
 import CampaignDashboard from './components/campaigns/CampaignDashboard.jsx';
 import useCampaigns from './hooks/useCampaigns.js';
+import { getProspectId } from './lib/prospectId.js';
 import { runDealRadar } from './api/scaffold.js';
 
 // phase: 'input' | 'reasoning' | 'prospects' | 'briefing' | 'outreach'
@@ -116,7 +117,7 @@ export default function App() {
   const toggleAllProspects = () => {
     setSelectedProspectIds((prev) => {
       if (prev.size === prospects.length) return new Set();
-      return new Set(prospects.map((p) => p.name));
+      return new Set(prospects.map((p) => getProspectId(p)));
     });
   };
 
@@ -154,7 +155,7 @@ export default function App() {
   const reasoningCollapsed = showProspects;
 
   const selectedProspectObjects = useMemo(
-    () => prospects.filter((p) => selectedProspectIds.has(p.name)),
+    () => prospects.filter((p) => selectedProspectIds.has(getProspectId(p))),
     [prospects, selectedProspectIds],
   );
 
@@ -245,7 +246,7 @@ export default function App() {
             {showProspects && prospects.length > 0 && (
               <ProspectTable
                 prospects={prospects}
-                selectedId={selected?.name}
+                selectedId={selected ? getProspectId(selected) : null}
                 onSelect={handleSelect}
                 selectedIds={selectedProspectIds}
                 onToggleSelect={toggleProspect}
