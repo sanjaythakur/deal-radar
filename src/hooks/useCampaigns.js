@@ -1,25 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { DEFAULT_LEAD_STATUS, MOCK_CAMPAIGNS } from '../data/mockCampaigns.js';
+import { DEFAULT_LEAD_STATUS } from '../data/mockCampaigns.js';
+import {
+  addLeadsToCampaign as apiAddLeads,
+  bulkUpdateLeadStatus as apiBulkUpdateStatus,
+  createCampaign as apiCreateCampaign,
+  deleteLeads as apiDeleteLeads,
+  listCampaigns as apiListCampaigns,
+  updateLead as apiUpdateLead,
+} from '../api/campaigns.js';
 
-const STORAGE_KEY = 'deal-radar:campaigns';
-
-function loadInitial() {
-  if (typeof window === 'undefined') return MOCK_CAMPAIGNS;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return MOCK_CAMPAIGNS;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return MOCK_CAMPAIGNS;
-    return parsed;
-  } catch {
-    return MOCK_CAMPAIGNS;
-  }
-}
-
+// Adapts a Prospect (from the Prospect Finder pipeline) into the lead shape
+// the campaign UI expects. Kept identical to the previous client-only logic
+// so the UI panels (BriefingCard, OutreachPanel, etc.) keep working.
 function adaptProspectToLead(prospect, provenanceContext) {
   const now = new Date().toISOString();
-  // Preserve the full prospect payload so the campaign view can render the
-  // same Briefing + Outreach panels the Prospect Finder uses.
   return {
     ...prospect,
     prospectId: prospect.name,
@@ -52,20 +46,35 @@ function adaptProspectToLead(prospect, provenanceContext) {
   };
 }
 
+// Fire-and-log: we apply optimistic updates locally, then push to the API.
+// If a write fails we surface it in the console (and on the next mount the
+// hook re-fetches from the server and self-heals).
+function reportError(label) {
+  return (err) => {
+    console.error(`[useCampaigns] ${label} failed`, err);
+  };
+}
+
 export default function useCampaigns() {
-  const [campaigns, setCampaigns] = useState(loadInitial);
+  const [campaigns, setCampaigns] = useState([]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(campaigns));
-    } catch {
-      // ignore quota / privacy mode errors
-    }
-  }, [campaigns]);
+    let cancelled = false;
+    apiListCampaigns()
+      .then((rows) => {
+        if (!cancelled && Array.isArray(rows)) setCampaigns(rows);
+      })
+      .catch(reportError('list'));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const createCampaign = useCallback((name) => {
     const trimmed = (name || '').trim();
     if (!trimmed) return null;
+    // Optimistic local insert with a client-generated id so callers (like
+    // CampaignAssignment) can immediately reference the new campaign.
     const campaign = {
       id: `camp_${Date.now()}`,
       name: trimmed,
@@ -73,11 +82,18 @@ export default function useCampaigns() {
       leads: [],
     };
     setCampaigns((prev) => [campaign, ...prev]);
+    apiCreateCampaign({ id: campaign.id, name: trimmed })
+      .then((persisted) => {
+        if (!persisted) return;
+        setCampaigns((prev) => prev.map((c) => (c.id === persisted.id ? persisted : c)));
+      })
+      .catch(reportError('create'));
     return campaign;
   }, []);
 
   const addLeadsToCampaign = useCallback((campaignId, prospects, provenanceContext) => {
     if (!campaignId || !Array.isArray(prospects) || prospects.length === 0) return;
+    let appended = [];
     setCampaigns((prev) =>
       prev.map((c) => {
         if (c.id !== campaignId) return c;
@@ -86,9 +102,18 @@ export default function useCampaigns() {
           .filter((p) => p && p.name && !existing.has(p.name))
           .map((p) => adaptProspectToLead(p, provenanceContext));
         if (additions.length === 0) return c;
+        appended = additions;
         return { ...c, leads: [...c.leads, ...additions] };
       }),
     );
+    if (appended.length > 0) {
+      apiAddLeads(campaignId, appended)
+        .then((persisted) => {
+          if (!persisted) return;
+          setCampaigns((prev) => prev.map((c) => (c.id === persisted.id ? persisted : c)));
+        })
+        .catch(reportError('addLeads'));
+    }
   }, []);
 
   const updateLeadStatus = useCallback((campaignId, prospectId, status) => {
@@ -104,6 +129,7 @@ export default function useCampaigns() {
         };
       }),
     );
+    apiUpdateLead(campaignId, prospectId, { status }).catch(reportError('updateStatus'));
   }, []);
 
   const updateLeadNotes = useCallback((campaignId, prospectId, notes) => {
@@ -112,12 +138,11 @@ export default function useCampaigns() {
         if (c.id !== campaignId) return c;
         return {
           ...c,
-          leads: c.leads.map((l) =>
-            l.prospectId === prospectId ? { ...l, notes } : l,
-          ),
+          leads: c.leads.map((l) => (l.prospectId === prospectId ? { ...l, notes } : l)),
         };
       }),
     );
+    apiUpdateLead(campaignId, prospectId, { notes }).catch(reportError('updateNotes'));
   }, []);
 
   const bulkUpdateStatus = useCallback((campaignId, prospectIds, status) => {
@@ -135,6 +160,7 @@ export default function useCampaigns() {
         };
       }),
     );
+    apiBulkUpdateStatus(campaignId, prospectIds, status).catch(reportError('bulkStatus'));
   }, []);
 
   const removeLeadsFromCampaign = useCallback((campaignId, prospectIds) => {
@@ -146,6 +172,7 @@ export default function useCampaigns() {
         return { ...c, leads: c.leads.filter((l) => !idSet.has(l.prospectId)) };
       }),
     );
+    apiDeleteLeads(campaignId, prospectIds).catch(reportError('deleteLeads'));
   }, []);
 
   return {

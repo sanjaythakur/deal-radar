@@ -1,0 +1,85 @@
+# Coolify deployment for Deal-Radar.
+#
+# Three services on a private compose network:
+#   - db       : Postgres 16. Holds campaigns + leads so they persist across
+#                deploys. Data lives on the named `dealradar-db` volume.
+#   - backend  : FastAPI (Crustdata + OpenAI proxy). NOT exposed publicly.
+#                Frontend reaches it via the docker network as `http://backend:8000`.
+#   - frontend : nginx serving the built Vite SPA. Reverse-proxies /api/* to
+#                the backend. This is the only service Coolify exposes externally.
+#
+# Coolify magic envs (do NOT set these by hand — Coolify fills them in):
+#   SERVICE_FQDN_FRONTEND  -> public domain Coolify provisions for the SPA.
+#                             You can override it in the Coolify UI to use your
+#                             own domain.
+#
+# Secrets you must set in the Coolify "Environment Variables" tab:
+#   CRUSTDATA_API_KEY
+#   OPENAI_API_KEY
+#   OPENAI_MODEL           (optional, defaults to gpt-5.4-mini)
+#   POSTGRES_PASSWORD      (optional, defaults to `dealradar` — change in prod)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dealradar}
+      POSTGRES_USER: ${POSTGRES_USER:-dealradar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dealradar}
+    volumes:
+      - dealradar-db:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "pg_isready -U ${POSTGRES_USER:-dealradar} -d ${POSTGRES_DB:-dealradar}"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      CRUSTDATA_API_KEY: ${CRUSTDATA_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dealradar}:${POSTGRES_PASSWORD:-dealradar}@db:5432/${POSTGRES_DB:-dealradar}}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Coolify replaces this at deploy time with the generated/configured FQDN.
+      SERVICE_FQDN_FRONTEND: /
+    ports:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  dealradar-db:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -17,7 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load .env *before* importing modules that read env at import time.
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
+from campaigns import router as campaigns_router, seed_if_empty  # noqa: E402
 from crustdata import CrustdataError  # noqa: E402
+from db import init_db  # noqa: E402
 from llm import generate_outreach, parse_query, score_prospect  # noqa: E402
 from pipeline import fetch_web_signals, run_enrich  # noqa: E402
 from schemas import (  # noqa: E402
@@ -40,7 +43,16 @@ logging.basicConfig(
 )
 log = logging.getLogger("deal-radar")
 
-app = FastAPI(title="Deal-Radar backend", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await init_db()
+    await seed_if_empty()
+    yield
+
+
+app = FastAPI(title="Deal-Radar backend", version="0.2.0", lifespan=lifespan)
+app.include_router(campaigns_router)
 
 # CORS: not strictly needed when fronted by the Vite proxy, but useful when
 # hitting the API directly from curl/Postman during development.
