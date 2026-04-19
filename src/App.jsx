@@ -13,6 +13,7 @@ export default function App() {
   const [prospects, setProspects] = useState([]);
   const [selected, setSelected] = useState(null);
   const [showOutreach, setShowOutreach] = useState(false);
+  const [error, setError] = useState(null);
 
   const apiDoneRef = useRef(false);
   const animDoneRef = useRef(false);
@@ -29,6 +30,7 @@ export default function App() {
     setQuery(q);
     setSelected(null);
     setShowOutreach(false);
+    setError(null);
     apiDoneRef.current = false;
     animDoneRef.current = false;
     setPhase('reasoning');
@@ -38,6 +40,8 @@ export default function App() {
       setProspects(results);
     } catch (err) {
       console.error('Deal-Radar pipeline failed', err);
+      setError(err?.message || 'Pipeline failed. Check the backend logs.');
+      setProspects([]);
     } finally {
       apiDoneRef.current = true;
       tryRevealProspects();
@@ -66,6 +70,7 @@ export default function App() {
     setProspects([]);
     setSelected(null);
     setShowOutreach(false);
+    setError(null);
     apiDoneRef.current = false;
     animDoneRef.current = false;
   };
@@ -133,7 +138,33 @@ export default function App() {
           />
         )}
 
-        {showProspects && (
+        {error && phase !== 'input' && (
+          <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200 animate-[fadeSlide_0.35s_ease-out_both]">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-red-400">⚠</span>
+              <div className="flex-1 space-y-2">
+                <div className="font-medium text-red-100">Pipeline failed</div>
+                <div className="font-mono text-xs leading-relaxed text-red-300/90">
+                  {error}
+                </div>
+                <button
+                  onClick={handleReset}
+                  className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-red-500/50 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-100 transition hover:bg-red-500/20"
+                >
+                  Try again →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showProspects && prospects.length === 0 && !error && (
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)]/60 p-6 text-center text-sm text-zinc-400">
+            No prospects matched the ICP. Try broadening the query.
+          </div>
+        )}
+
+        {showProspects && prospects.length > 0 && (
           <ProspectTable
             prospects={prospects}
             selectedId={selected?.name}

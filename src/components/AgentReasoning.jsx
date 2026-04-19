@@ -5,7 +5,7 @@ const STEPS = [
   { icon: '🏢', text: 'Resolving target companies via /company/identify...', meta: 'mock: 14 companies matched' },
   { icon: '👤', text: 'Searching decision-makers via /person/search...', meta: 'mock: 31 candidates found' },
   { icon: '✨', text: 'Enriching top candidates via /person/enrich...', meta: 'mock: 20 profiles enriched' },
-  { icon: '📡', text: 'Scanning web signals via /web/search/live...', meta: 'mock: signals found for 13' },
+  { icon: '📡', text: 'Scanning web signals via /web/search...', meta: 'mock: signals found for 13' },
   { icon: '🧠', text: 'Scoring candidates by Why-Now momentum...', meta: null },
   { icon: '📝', text: 'Generating personalised outreach lines...', meta: null },
   { icon: '✅', text: 'Done. 20 prospects ready.', meta: null },

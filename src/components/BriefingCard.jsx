@@ -34,34 +34,42 @@ export default function BriefingCard({ prospect, onGenerateOutreach, outreachRea
           </div>
         </div>
 
-        <div className="space-y-2">
-          <SectionLabel>Company news</SectionLabel>
-          <p className="text-sm leading-relaxed text-zinc-300">{prospect.companyNews}</p>
-        </div>
+        {prospect.companyNews && (
+          <div className="space-y-2">
+            <SectionLabel>Company news</SectionLabel>
+            <p className="text-sm leading-relaxed text-zinc-300">{prospect.companyNews}</p>
+          </div>
+        )}
 
-        <div className="space-y-2">
-          <SectionLabel>Their recent signal</SectionLabel>
-          <blockquote className="border-l-2 border-[var(--color-warn)] pl-4 text-sm italic leading-relaxed text-zinc-300">
-            {prospect.recentPost}
-          </blockquote>
-        </div>
+        {prospect.recentPost && (
+          <div className="space-y-2">
+            <SectionLabel>Their recent signal</SectionLabel>
+            <blockquote className="border-l-2 border-[var(--color-warn)] pl-4 text-sm italic leading-relaxed text-zinc-300">
+              {prospect.recentPost}
+            </blockquote>
+          </div>
+        )}
 
-        <div className="space-y-2">
-          <SectionLabel>Inferred pain point</SectionLabel>
-          <p className="text-sm leading-relaxed text-zinc-300">{prospect.painPoint}</p>
-        </div>
+        {prospect.painPoint && (
+          <div className="space-y-2">
+            <SectionLabel>Inferred pain point</SectionLabel>
+            <p className="text-sm leading-relaxed text-zinc-300">{prospect.painPoint}</p>
+          </div>
+        )}
 
-        <div className="space-y-2">
-          <SectionLabel>Suggested talking points</SectionLabel>
-          <ul className="space-y-1.5 text-sm text-zinc-300">
-            {prospect.talkingPoints.map((tp, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="mt-1.5 inline-block h-1 w-1 flex-shrink-0 rounded-full bg-[var(--color-accent)]" />
-                <span className="leading-relaxed">{tp}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {prospect.talkingPoints?.length > 0 && (
+          <div className="space-y-2">
+            <SectionLabel>Suggested talking points</SectionLabel>
+            <ul className="space-y-1.5 text-sm text-zinc-300">
+              {prospect.talkingPoints.map((tp, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="mt-1.5 inline-block h-1 w-1 flex-shrink-0 rounded-full bg-[var(--color-accent)]" />
+                  <span className="leading-relaxed">{tp}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="pt-2">
           <button

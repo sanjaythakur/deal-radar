@@ -38,3 +38,13 @@ pnpm-debug.log*
 
 # Local-only docs
 phases/
+
+# Secrets (raw notes)
+keys.md
+
+# Python backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.env
+backend/*.pyc
