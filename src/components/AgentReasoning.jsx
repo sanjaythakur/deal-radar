@@ -1,45 +1,60 @@
 import { useEffect, useState } from 'react';
 
-// Each step's `metaKey` (when present) is looked up in the progress object
-// passed in from runDealRadar. While unknown the meta line is hidden; once
-// the backend returns a real count it appears next to the step label.
+// Each step optionally carries a `gateKey` — the key in the `progress` object
+// that must be set (by the backend response) before the step can be marked
+// done. This keeps the spinner on the *real* in-flight step instead of
+// racing ahead of the API. `metaKey` (when present) drives the small
+// "[N companies matched]" badge that appears once the count arrives.
 const STEPS = [
-  { icon: '🔍', text: 'Parsing query intent and extracting ICP filters...' },
+  {
+    icon: '🔍',
+    text: 'Parsing query intent and extracting ICP filters...',
+    gateKey: 'parsed',
+  },
   {
     icon: '🏢',
     text: 'Resolving target companies via /company/search...',
+    gateKey: 'companies_matched',
     metaKey: 'companies_matched',
     metaLabel: (n) => `${n} companies matched`,
   },
   {
     icon: '👤',
     text: 'Searching decision-makers via /person/search...',
+    gateKey: 'candidates_found',
     metaKey: 'candidates_found',
     metaLabel: (n) => `${n} candidates found`,
   },
   {
     icon: '✨',
     text: 'Enriching top candidates via /person/enrich...',
+    gateKey: 'profiles_enriched',
     metaKey: 'profiles_enriched',
     metaLabel: (n) => `${n} profiles enriched`,
   },
   {
     icon: '📡',
-    text: 'Scanning web signals via /web/search...',
+    text: 'Scanning web signals via /screener/web-search...',
+    gateKey: 'signals_found',
     metaKey: 'signals_found',
     metaLabel: (n) => `signals found for ${n}`,
   },
-  { icon: '🧠', text: 'Scoring candidates by Why-Now momentum...' },
-  { icon: '📝', text: 'Generating personalised outreach lines...' },
+  {
+    icon: '🧠',
+    text: 'Scoring candidates by Why-Now momentum...',
+    gateKey: 'scored',
+  },
+  { icon: '📝', text: 'Drafting personalised outreach angles...' },
   {
     icon: '✅',
     text: 'Done.',
+    gateKey: 'prospects_ready',
     metaKey: 'prospects_ready',
     metaLabel: (n) => `${n} prospects ready`,
   },
 ];
 
-const STEP_DELAY = 700;
+const MIN_STEP_MS = 450;
 
 export default function AgentReasoning({ onComplete, collapsed = false, progress = {} }) {
   const [activeIdx, setActiveIdx] = useState(0);
@@ -53,9 +68,13 @@ export default function AgentReasoning({ onComplete, collapsed = false, progress
       onComplete?.();
       return;
     }
-    const t = setTimeout(() => setActiveIdx((i) => i + 1), STEP_DELAY);
+    const step = STEPS[activeIdx];
+    const gateReady = !step.gateKey || progress[step.gateKey] !== undefined;
+    // Hold the spinner on this step until the backend reports its key.
+    if (!gateReady) return;
+    const t = setTimeout(() => setActiveIdx((i) => i + 1), MIN_STEP_MS);
     return () => clearTimeout(t);
-  }, [activeIdx, collapsed, onComplete]);
+  }, [activeIdx, collapsed, onComplete, progress]);
 
   return (
     <section className="space-y-3 animate-[fadeIn_0.3s_ease-out_both]">
