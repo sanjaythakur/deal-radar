@@ -90,4 +90,5 @@ Set these in the Coolify env tab:
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (optional, defaults to `gpt-5.4-mini`)
 
-Coolify auto-injects `SERVICE_FQDN_WEB` for the public hostname.
+Coolify auto-injects `SERVICE_URL_WEB_3000` for the public URL and proxies it
+to the Next.js container on port 3000.

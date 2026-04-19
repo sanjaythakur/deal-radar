@@ -6,9 +6,9 @@
 #           Campaigns persist in-process memory (lost on redeploy/restart).
 #
 # Coolify magic envs (do NOT set these by hand — Coolify fills them in):
-#   SERVICE_FQDN_WEB  -> public domain Coolify provisions for the app.
-#                        You can override it in the Coolify UI to use your
-#                        own domain.
+#   SERVICE_URL_WEB_3000 -> public URL Coolify provisions for the web service
+#                           and proxies to container port 3000. You can
+#                           override it in the Coolify UI to use your own domain.
 #
 # Secrets you must set in the Coolify "Environment Variables" tab:
 #   CRUSTDATA_API_KEY
@@ -22,10 +22,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      # Coolify replaces this at deploy time with the generated/configured FQDN.
-      SERVICE_FQDN_WEB: /
-      CRUSTDATA_API_KEY: ${CRUSTDATA_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Coolify replaces this at deploy time with the generated/configured URL.
+      SERVICE_URL_WEB_3000: /
+      CRUSTDATA_API_KEY: ${CRUSTDATA_API_KEY:?}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
     ports:
       - "3000"
