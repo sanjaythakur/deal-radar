@@ -6,7 +6,7 @@ An AI agent that tells you WHO to sell to, WHY now, and WHAT to say.
 
 - **Framework:** Next.js 15 (App Router) + React 18 + Tailwind CSS v4
 - **API:** Next.js Route Handlers (`app/api/*`) — proxy Crustdata + OpenAI so secrets never touch the browser
-- **DB:** Postgres 16 (campaigns + leads stored as a `jsonb` column) via `pg`
+- **Persistence:** in-process memory (campaigns reset on server restart / redeploy)
 
 ## Getting started
 
@@ -24,7 +24,6 @@ Open http://localhost:3000.
 CRUSTDATA_API_KEY=...
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.4-mini
-DATABASE_URL=postgres://dealradar:dealradar@localhost:5432/dealradar
 ```
 
 The browser never reads either API key — every call goes through the Next.js
@@ -34,16 +33,6 @@ route handlers under `/api/*`.
 
 - `npm run build` — production build (Next.js standalone output in `.next/`)
 - `npm run start` — serve the production build
-
-### Local Postgres
-
-Easiest way to get a local Postgres for `DATABASE_URL`:
-
-```bash
-docker compose up db -d
-```
-
-The `web` service (Next.js) talks to it via the compose network.
 
 ## The flow
 
@@ -55,7 +44,8 @@ A single page reveals 5 steps sequentially:
 4. **Briefing** — click any row for a pre-call card (company news, signal, pain point, talking points)
 5. **Outreach** — editable subject + body, copy-to-clipboard, CSV export of all leads
 
-A second tab (**Campaigns**) persists hand-picked leads to Postgres.
+A second tab (**Campaigns**) keeps hand-picked leads in memory for the lifetime
+of the running server. Restart the process and the seed list comes back.
 
 ## Project layout
 
@@ -84,23 +74,20 @@ lib/
   crustdata.js             fetch-based Crustdata client (was backend/crustdata.py)
   llm.js                   OpenAI wrappers (gpt-5.4-mini by default)
   pipeline.js              Recipe D orchestration
-  db.js                    pg pool + lazy schema/seed init
-  campaigns.js             campaigns CRUD over the JSON-blob table
+  campaigns.js             in-memory campaigns CRUD (seeded on first access)
   client/                  thin browser-side fetch helpers used by app/page.jsx
   server/errors.js         CrustdataError -> HTTP 502 translation
-docker-compose.yml         db + web (Next.js) services for Coolify
+docker-compose.yml         single web (Next.js) service for Coolify
 Dockerfile                 multi-stage Next.js standalone build
 ```
 
 ## Deployment (Coolify)
 
-Coolify reads `docker-compose.yml` and deploys the `web` service publicly,
-keeping `db` private. Set these in the Coolify env tab:
+Coolify reads `docker-compose.yml` and deploys the `web` service publicly.
+Set these in the Coolify env tab:
 
 - `CRUSTDATA_API_KEY`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (optional, defaults to `gpt-5.4-mini`)
-- `POSTGRES_PASSWORD` (optional)
-- `DATABASE_URL` (only if you override the Postgres credentials)
 
 Coolify auto-injects `SERVICE_FQDN_WEB` for the public hostname.

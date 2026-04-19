@@ -1,11 +1,9 @@
 # Coolify deployment for Deal-Radar.
 #
-# Two services on a private compose network:
-#   - db   : Postgres 16. Holds campaigns + leads so they persist across
-#            deploys. Data lives on the named `dealradar-db` volume.
-#   - web  : Next.js app (App Router + route handlers). Serves the UI and
-#            owns the Crustdata + OpenAI keys via /api/* route handlers.
-#            This is the only service Coolify exposes externally.
+# Single service:
+#   - web : Next.js app (App Router + route handlers). Serves the UI and
+#           owns the Crustdata + OpenAI keys via /api/* route handlers.
+#           Campaigns persist in-process memory (lost on redeploy/restart).
 #
 # Coolify magic envs (do NOT set these by hand — Coolify fills them in):
 #   SERVICE_FQDN_WEB  -> public domain Coolify provisions for the app.
@@ -16,31 +14,8 @@
 #   CRUSTDATA_API_KEY
 #   OPENAI_API_KEY
 #   OPENAI_MODEL           (optional, defaults to gpt-5.4-mini)
-#   POSTGRES_PASSWORD      (optional, defaults to `dealradar` — change in prod)
 
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-dealradar}
-      POSTGRES_USER: ${POSTGRES_USER:-dealradar}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dealradar}
-    # Bind to 127.0.0.1 so a local `npm run dev` can reach Postgres at
-    # localhost:5432 without exposing it to the LAN/internet.
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - dealradar-db:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        - "CMD-SHELL"
-        - "pg_isready -U ${POSTGRES_USER:-dealradar} -d ${POSTGRES_DB:-dealradar}"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   web:
     build:
       context: .
@@ -52,21 +27,11 @@ services:
       CRUSTDATA_API_KEY: ${CRUSTDATA_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
-      # NOTE: Coolify's .env template parser doesn't support nested ${} interpolation,
-      # so this default is flat. If you override POSTGRES_USER / POSTGRES_PASSWORD /
-      # POSTGRES_DB in Coolify, also set DATABASE_URL to match.
-      DATABASE_URL: ${DATABASE_URL:-postgres://dealradar:dealradar@db:5432/dealradar}
     ports:
       - "3000"
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
-
-volumes:
-  dealradar-db:
