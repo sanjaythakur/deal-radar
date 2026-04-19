@@ -1,4 +1,4 @@
-import { LEAD_STATUS_BY_VALUE } from '../../data/mockCampaigns.js';
+import { LEAD_STATUS_BY_VALUE } from '../../data/leadStatuses.js';
 
 function formatDate(iso) {
   if (!iso) return '';

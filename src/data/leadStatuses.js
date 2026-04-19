@@ -1,23 +1,8 @@
-export const MOCK_CAMPAIGNS = [
-  {
-    id: 'camp_001',
-    name: 'SEA Hotel Outreach Q2',
-    createdAt: '2025-04-01',
-    leads: [],
-  },
-  {
-    id: 'camp_002',
-    name: 'Corporate TMC AI Signal',
-    createdAt: '2025-03-18',
-    leads: [],
-  },
-  {
-    id: 'camp_003',
-    name: 'APAC Loyalty Partnerships',
-    createdAt: '2025-03-05',
-    leads: [],
-  },
-];
+// Lead status enum shared between CampaignList + CampaignDetail.
+//
+// The `DEFAULT_LEAD_STATUS` that used to live here (and the `MOCK_CAMPAIGNS`
+// seed array) were removed once campaigns moved to MongoDB — the backend
+// owns lead defaults in `backend/campaigns.py`.
 
 export const LEAD_STATUSES = [
   {
@@ -62,5 +47,3 @@ export const LEAD_STATUS_BY_VALUE = LEAD_STATUSES.reduce((acc, s) => {
   acc[s.value] = s;
   return acc;
 }, {});
-
-export const DEFAULT_LEAD_STATUS = 'Not Started';

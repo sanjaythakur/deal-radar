@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LEAD_STATUSES, LEAD_STATUS_BY_VALUE } from '../../data/mockCampaigns.js';
+import { LEAD_STATUSES, LEAD_STATUS_BY_VALUE } from '../../data/leadStatuses.js';
 import BriefingCard from '../BriefingCard.jsx';
 import OutreachPanel from '../OutreachPanel.jsx';
 
