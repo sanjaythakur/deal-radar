@@ -183,6 +183,33 @@ def _company_basics(company_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _flatten_strings(items: Any, *keys: str) -> list[str]:
+    """Flatten a list whose elements are strings OR dicts.
+
+    For dicts we try ``keys`` in order and pick the first truthy string we
+    find. Crustdata ``contact`` payloads vary subtly between accounts/plans,
+    so we keep this defensive.
+    """
+    out: list[str] = []
+    if not isinstance(items, list):
+        return out
+    for it in items:
+        if isinstance(it, str):
+            v = it.strip()
+            if v and v not in out:
+                out.append(v)
+            continue
+        if isinstance(it, dict):
+            for k in keys:
+                v = it.get(k)
+                if isinstance(v, str) and v.strip():
+                    v = v.strip()
+                    if v not in out:
+                        out.append(v)
+                    break
+    return out
+
+
 def _person_basics(person_data: dict[str, Any]) -> dict[str, Any]:
     basic = _dig(person_data, "basic_profile", default={}) or {}
     current = (
@@ -197,6 +224,25 @@ def _person_basics(person_data: dict[str, Any]) -> dict[str, Any]:
         current_role = {}
     location = basic.get("location") or {}
     company_name = current_role.get("name") or current_role.get("company_name") or ""
+
+    contact = _dig(person_data, "contact", default={}) or {}
+    business_emails = _flatten_strings(
+        contact.get("business_emails"),
+        "email", "address", "value", "business_email",
+    )
+    personal_emails = _flatten_strings(
+        contact.get("personal_emails"),
+        "email", "address", "value", "personal_email",
+    )
+    phone_numbers = _flatten_strings(
+        contact.get("phone_numbers"),
+        "phone_number", "number", "value", "phone",
+    )
+    websites = _flatten_strings(
+        contact.get("websites"),
+        "url", "website", "value",
+    )
+
     return {
         "name": basic.get("name")
         or " ".join(filter(None, [basic.get("first_name"), basic.get("last_name")])).strip(),
@@ -213,6 +259,10 @@ def _person_basics(person_data: dict[str, Any]) -> dict[str, Any]:
             or basic.get("professional_network_profile_url")
             or _dig(person_data, "professional_network", "profile_url")
         ),
+        "business_emails": business_emails,
+        "personal_emails": personal_emails,
+        "phone_numbers": phone_numbers,
+        "websites": websites,
     }
 
 
