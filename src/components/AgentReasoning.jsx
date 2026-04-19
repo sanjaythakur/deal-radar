@@ -1,19 +1,47 @@
 import { useEffect, useState } from 'react';
 
+// Each step's `metaKey` (when present) is looked up in the progress object
+// passed in from runDealRadar. While unknown the meta line is hidden; once
+// the backend returns a real count it appears next to the step label.
 const STEPS = [
-  { icon: '🔍', text: 'Parsing query intent and extracting ICP filters...', meta: null },
-  { icon: '🏢', text: 'Resolving target companies via /company/identify...', meta: 'mock: 14 companies matched' },
-  { icon: '👤', text: 'Searching decision-makers via /person/search...', meta: 'mock: 31 candidates found' },
-  { icon: '✨', text: 'Enriching top candidates via /person/enrich...', meta: 'mock: 20 profiles enriched' },
-  { icon: '📡', text: 'Scanning web signals via /web/search...', meta: 'mock: signals found for 13' },
-  { icon: '🧠', text: 'Scoring candidates by Why-Now momentum...', meta: null },
-  { icon: '📝', text: 'Generating personalised outreach lines...', meta: null },
-  { icon: '✅', text: 'Done. 20 prospects ready.', meta: null },
+  { icon: '🔍', text: 'Parsing query intent and extracting ICP filters...' },
+  {
+    icon: '🏢',
+    text: 'Resolving target companies via /company/search...',
+    metaKey: 'companies_matched',
+    metaLabel: (n) => `${n} companies matched`,
+  },
+  {
+    icon: '👤',
+    text: 'Searching decision-makers via /person/search...',
+    metaKey: 'candidates_found',
+    metaLabel: (n) => `${n} candidates found`,
+  },
+  {
+    icon: '✨',
+    text: 'Enriching top candidates via /person/enrich...',
+    metaKey: 'profiles_enriched',
+    metaLabel: (n) => `${n} profiles enriched`,
+  },
+  {
+    icon: '📡',
+    text: 'Scanning web signals via /web/search...',
+    metaKey: 'signals_found',
+    metaLabel: (n) => `signals found for ${n}`,
+  },
+  { icon: '🧠', text: 'Scoring candidates by Why-Now momentum...' },
+  { icon: '📝', text: 'Generating personalised outreach lines...' },
+  {
+    icon: '✅',
+    text: 'Done.',
+    metaKey: 'prospects_ready',
+    metaLabel: (n) => `${n} prospects ready`,
+  },
 ];
 
 const STEP_DELAY = 700;
 
-export default function AgentReasoning({ onComplete, collapsed = false }) {
+export default function AgentReasoning({ onComplete, collapsed = false, progress = {} }) {
   const [activeIdx, setActiveIdx] = useState(0);
 
   useEffect(() => {
@@ -47,6 +75,12 @@ export default function AgentReasoning({ onComplete, collapsed = false }) {
           const isActive = i === activeIdx;
           const isPending = i > activeIdx;
 
+          const metaValue = step.metaKey ? progress[step.metaKey] : undefined;
+          const metaText =
+            metaValue !== undefined && metaValue !== null
+              ? step.metaLabel(metaValue)
+              : null;
+
           return (
             <div
               key={i}
@@ -64,8 +98,8 @@ export default function AgentReasoning({ onComplete, collapsed = false }) {
               <span className="w-5 select-none">{step.icon}</span>
               <span className={`flex-1 ${isDone ? 'text-zinc-300' : isActive ? 'text-zinc-100' : 'text-zinc-500'}`}>
                 {step.text}
-                {step.meta && (
-                  <span className="ml-2 text-[var(--color-warn)]">[{step.meta}]</span>
+                {metaText && (
+                  <span className="ml-2 text-[var(--color-accent)]">[{metaText}]</span>
                 )}
               </span>
             </div>

@@ -7,8 +7,21 @@ Combines:
   /company/enrich  (news/hiring/funding) ->  per-company signal context
   llm.generate_briefing                  ->  painPoint + talkingPoints
 
-The Crustdata response shapes are pulled from docs/crustdata-api.md but we
-read defensively because real responses occasionally drop fields.
+NOTE on filter schema (verified empirically against the live API — the public
+docs are partly wrong):
+
+- Leaf condition: ``{"field": ..., "type": <operator>, "value": ...}``.
+  Operator goes in ``type`` (not ``op``).
+- Group: ``{"op": "and"|"or", "conditions": [...]}``. ``op`` is reserved for
+  groups; leaves never use it.
+- Sort entries are inconsistent across endpoints:
+    /company/search -> {"column": ..., "order": ...}
+    /person/search  -> {"field":  ..., "order": ...}
+- Country filter for company search lives at ``locations.country`` (ISO3),
+  not ``locations.hq_country`` as the docs claim.
+- Two ``(.)`` regex conditions on the same person field rarely match. Use
+  ``current.seniority_level`` (enum) + a single ``current.title`` regex
+  instead.
 """
 
 from __future__ import annotations
@@ -40,6 +53,22 @@ COMPANY_ENRICH_FIELDS = ["basic_info", "news", "hiring", "funding"]
 # ---------------------------------------------------------------------------
 
 
+def _and_group(conditions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Always wrap conditions in an "and" group — Crustdata rejects bare leaves."""
+    return {"op": "and", "conditions": conditions}
+
+
+def _or_group(conditions: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"op": "or", "conditions": conditions}
+
+
+def _countries_iso3(filters: dict[str, Any]) -> list[str]:
+    multi = filters.get("countries_iso3") or []
+    if isinstance(multi, list):
+        return [c for c in multi if isinstance(c, str) and c]
+    return []
+
+
 def _company_search_filters(filters: dict[str, Any]) -> dict[str, Any]:
     """Build a /company/search filter clause from our parsed ICP filters."""
     conditions: list[dict[str, Any]] = []
@@ -47,44 +76,48 @@ def _company_search_filters(filters: dict[str, Any]) -> dict[str, Any]:
     industries = filters.get("industries") or []
     if industries:
         conditions.append(
-            {
-                "column": "basic_info.industries",
-                "type": "in",
-                "value": industries,
-            }
+            {"field": "basic_info.industries", "type": "in", "value": industries}
         )
 
-    country = filters.get("country_iso3")
-    if country:
+    countries = _countries_iso3(filters)
+    if countries:
+        # `locations.country` is the *real* ISO3 country filter for company
+        # search. (Docs list `locations.hq_country` but the live API rejects
+        # it as an unsupported column.)
         conditions.append(
-            {
-                "column": "locations.hq_country",
-                "type": "=",
-                "value": country,
-            }
+            {"field": "locations.country", "type": "in", "value": countries}
         )
 
     if not conditions:
-        return {
-            "column": "headcount.total",
-            "type": "=>",
-            "value": 50,
-        }
-    if len(conditions) == 1:
-        return conditions[0]
-    return {"and": conditions}
+        # Fall back to "any company with >=50 employees" so we still get *something*.
+        conditions.append({"field": "headcount.total", "type": "=>", "value": 50})
+
+    return _and_group(conditions)
 
 
 def _person_search_filters(filters: dict[str, Any], company_names: list[str]) -> dict[str, Any]:
     conditions: list[dict[str, Any]] = []
 
-    titles = filters.get("titles") or []
-    if titles:
+    seniority = filters.get("seniority_levels") or []
+    if seniority:
+        conditions.append(
+            {
+                "field": "experience.employment_details.current.seniority_level",
+                "type": "in",
+                "value": seniority,
+            }
+        )
+
+    title_keyword = (filters.get("title_keyword") or "").strip()
+    if title_keyword:
+        # Single regex on current.title — keep it broad. Crustdata returns
+        # zero rows when two `(.)` conditions are AND'd on the same field,
+        # so we rely on seniority_level for the "VP / Director" half.
         conditions.append(
             {
                 "field": "experience.employment_details.current.title",
-                "type": "in",
-                "value": titles,
+                "type": "(.)",
+                "value": title_keyword,
             }
         )
 
@@ -96,26 +129,27 @@ def _person_search_filters(filters: dict[str, Any], company_names: list[str]) ->
                 "value": company_names,
             }
         )
+    else:
+        countries = _countries_iso3(filters)
+        if countries:
+            conditions.append(
+                {
+                    "field": "experience.employment_details.company_headquarters_country",
+                    "type": "in",
+                    "value": countries,
+                }
+            )
 
-    country = filters.get("country_iso3")
-    if country and not company_names:
+    if not conditions:
         conditions.append(
             {
-                "field": "experience.employment_details.company_headquarters_country",
-                "type": "=",
-                "value": country,
+                "field": "experience.employment_details.current.seniority_level",
+                "type": "in",
+                "value": ["Vice President", "Director", "CXO"],
             }
         )
 
-    if not conditions:
-        return {
-            "field": "experience.employment_details.current.seniority_level",
-            "type": "in",
-            "value": ["VP", "Director", "C-Level"],
-        }
-    if len(conditions) == 1:
-        return conditions[0]
-    return {"and": conditions}
+    return _and_group(conditions)
 
 
 # ---------------------------------------------------------------------------
@@ -139,10 +173,13 @@ def _company_basics(company_data: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": basic.get("name") or basic.get("company_name") or "",
         "domain": basic.get("primary_domain") or basic.get("domain"),
-        "crustdata_company_id": basic.get("crustdata_company_id") or company_data.get("crustdata_company_id"),
+        "crustdata_company_id": (
+            company_data.get("crustdata_company_id")
+            or basic.get("crustdata_company_id")
+        ),
         "industry": (basic.get("industries") or [None])[0] if basic.get("industries") else None,
-        "hq_country": locations.get("hq_country"),
-        "hq_city": locations.get("hq_city"),
+        "hq_country": locations.get("country") or locations.get("hq_country"),
+        "hq_city": locations.get("city") or locations.get("hq_city"),
     }
 
 
@@ -159,17 +196,23 @@ def _person_basics(person_data: dict[str, Any]) -> dict[str, Any]:
     else:
         current_role = {}
     location = basic.get("location") or {}
+    company_name = current_role.get("name") or current_role.get("company_name") or ""
     return {
         "name": basic.get("name")
         or " ".join(filter(None, [basic.get("first_name"), basic.get("last_name")])).strip(),
         "title": current_role.get("title", ""),
-        "company": current_role.get("company_name", ""),
+        "company": company_name,
+        "company_domain": current_role.get("company_website_domain"),
+        "crustdata_company_id": current_role.get("crustdata_company_id"),
         "location": location.get("full_location")
         or ", ".join(filter(None, [location.get("city"), location.get("country")]))
         or basic.get("headline", ""),
-        "profile_url": basic.get("linkedin_url")
+        "profile_url": (
+            _dig(person_data, "social_handles", "professional_network_identifier", "profile_url")
+            or basic.get("linkedin_url")
             or basic.get("professional_network_profile_url")
-            or _dig(person_data, "professional_network", "profile_url"),
+            or _dig(person_data, "professional_network", "profile_url")
+        ),
     }
 
 
@@ -178,7 +221,8 @@ def _person_search_profile_urls(search_resp: dict[str, Any]) -> list[str]:
     urls: list[str] = []
     for p in profiles:
         url = (
-            _dig(p, "basic_profile", "linkedin_url")
+            _dig(p, "social_handles", "professional_network_identifier", "profile_url")
+            or _dig(p, "basic_profile", "linkedin_url")
             or _dig(p, "basic_profile", "professional_network_profile_url")
             or _dig(p, "professional_network", "profile_url")
             or p.get("linkedin_url")
@@ -196,8 +240,24 @@ def _company_signals(enrich_match: dict[str, Any]) -> dict[str, Any]:
     funding = _dig(company_data, "funding", default={}) or {}
     if isinstance(news, dict):
         news = news.get("articles") or news.get("items") or []
+    # Crustdata news entries use `article_*` keys — normalise into a stable
+    # internal shape used by the hook builder + LLM briefing prompt.
+    norm_news = []
+    for n in news[:5]:
+        norm_news.append(
+            {
+                "title": n.get("article_title") or n.get("title") or n.get("headline"),
+                "publisher": n.get("article_publisher_name")
+                or n.get("publisher")
+                or n.get("source"),
+                "date": n.get("article_publish_date")
+                or n.get("publish_date")
+                or n.get("date"),
+                "url": n.get("article_url") or n.get("url"),
+            }
+        )
     return {
-        "news": news[:5],
+        "news": norm_news,
         "hiring": {
             "openings_count": hiring.get("openings_count"),
             "openings_growth_percent": hiring.get("openings_growth_percent"),
@@ -220,8 +280,8 @@ def _hook_from_signals(signals: dict[str, Any]) -> str:
     if funding.get("last_round_type") and funding.get("last_fundraise_date"):
         return f"Raised {funding['last_round_type']} on {funding['last_fundraise_date']}"
     news = signals.get("news") or []
-    if news:
-        return news[0].get("title") or news[0].get("headline") or "Recent company news"
+    if news and news[0].get("title"):
+        return news[0]["title"]
     return "ICP-matched company"
 
 
@@ -230,10 +290,7 @@ def _company_news_blurb(signals: dict[str, Any]) -> str:
     if not news:
         return ""
     head = news[0]
-    title = head.get("title") or head.get("headline") or ""
-    publisher = head.get("publisher") or head.get("source") or ""
-    date = head.get("publish_date") or head.get("date") or ""
-    pieces = [p for p in [title, publisher, date] if p]
+    pieces = [p for p in [head.get("title"), head.get("publisher"), head.get("date")] if p]
     return " — ".join(pieces) if pieces else ""
 
 
@@ -271,7 +328,15 @@ async def _resolve_companies(client: CrustdataClient, filters: dict[str, Any]) -
     try:
         resp = await client.search_companies(
             filters=_company_search_filters(filters),
-            fields=["basic_info", "locations", "headcount"],
+            fields=[
+                "crustdata_company_id",
+                "basic_info.name",
+                "basic_info.primary_domain",
+                "basic_info.industries",
+                "locations.country",
+                "locations.city",
+                "headcount.total",
+            ],
             sorts=[{"column": "headcount.total", "order": "desc"}],
             limit=MAX_COMPANIES,
         )
@@ -302,9 +367,9 @@ async def _find_persons(
             filters=person_filters,
             fields=[
                 "basic_profile.name",
-                "basic_profile.linkedin_url",
                 "experience.employment_details.current.title",
                 "experience.employment_details.current.company_name",
+                "social_handles.professional_network_identifier.profile_url",
             ],
             sorts=[{"field": "metadata.updated_at", "order": "desc"}],
             limit=MAX_PERSON_SEARCH,
@@ -343,13 +408,24 @@ async def _enrich_companies(
     client: CrustdataClient,
     company_keys: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Returns map keyed by lowercased company name -> signals dict."""
+    """Returns map keyed by lowercased company name -> signals dict.
+
+    Prefer enriching by ``crustdata_company_id`` — domain enrich is fuzzy
+    and frequently returns the wrong sub-brand (e.g. accor.com -> Sofitel
+    Riyadh).
+    """
     if not company_keys:
         return {}
     ids = [k["id"] for k in company_keys.values() if k.get("id")]
-    domains = [k["domain"] for k in company_keys.values() if not k.get("id") and k.get("domain")]
-    names = [
-        k["name"] for k in company_keys.values() if not k.get("id") and not k.get("domain") and k.get("name")
+    fallback_domains = [
+        k["domain"]
+        for k in company_keys.values()
+        if not k.get("id") and k.get("domain")
+    ]
+    fallback_names = [
+        k["name"]
+        for k in company_keys.values()
+        if not k.get("id") and not k.get("domain") and k.get("name")
     ]
 
     results: list[dict[str, Any]] = []
@@ -361,17 +437,17 @@ async def _enrich_companies(
                 )
                 or []
             )
-        if domains:
+        if fallback_domains:
             results.extend(
                 await client.enrich_companies(
-                    domains=domains, fields=COMPANY_ENRICH_FIELDS
+                    domains=fallback_domains, fields=COMPANY_ENRICH_FIELDS
                 )
                 or []
             )
-        if names:
+        if fallback_names:
             results.extend(
                 await client.enrich_companies(
-                    names=names, fields=COMPANY_ENRICH_FIELDS
+                    names=fallback_names, fields=COMPANY_ENRICH_FIELDS
                 )
                 or []
             )
@@ -397,7 +473,12 @@ async def _enrich_companies(
 # ---------------------------------------------------------------------------
 
 
-async def run_enrich(filters: dict[str, Any]) -> list[dict[str, Any]]:
+async def run_enrich(filters: dict[str, Any]) -> dict[str, Any]:
+    """Returns {"prospects": [...], "stats": {...}}.
+
+    Stats keys are the per-stage counts the agent-reasoning panel renders:
+        companies_matched, candidates_found, profiles_enriched.
+    """
     async with CrustdataClient() as client:
         companies = await _resolve_companies(client, filters)
         log.info("resolved %d companies", len(companies))
@@ -407,6 +488,12 @@ async def run_enrich(filters: dict[str, Any]) -> list[dict[str, Any]]:
 
         person_data_list = await _enrich_persons(client, profile_urls)
         log.info("enriched %d persons", len(person_data_list))
+
+        stats = {
+            "companies_matched": len(companies),
+            "candidates_found": len(profile_urls),
+            "profiles_enriched": len(person_data_list),
+        }
 
         # Build base prospect rows + the company key set we need to enrich.
         prospects_raw: list[dict[str, Any]] = []
@@ -428,7 +515,16 @@ async def run_enrich(filters: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             key = (basics["company"] or "").strip().lower()
             if key and key not in company_keys:
-                company_keys[key] = {"id": None, "domain": None, "name": basics["company"]}
+                company_keys[key] = {
+                    "id": basics.get("crustdata_company_id"),
+                    "domain": basics.get("company_domain"),
+                    "name": basics["company"],
+                }
+            elif key and not company_keys[key].get("id") and basics.get("crustdata_company_id"):
+                company_keys[key]["id"] = basics["crustdata_company_id"]
+                company_keys[key]["domain"] = (
+                    company_keys[key].get("domain") or basics.get("company_domain")
+                )
             prospects_raw.append({**basics})
 
         # Cap company-name distribution so we don't show 4 people from the same place.
@@ -475,7 +571,8 @@ async def run_enrich(filters: dict[str, Any]) -> list[dict[str, Any]]:
         return p
 
     enriched = await asyncio.gather(*[_briefing_for(p) for p in prospects_raw])
-    return enriched[:MAX_RESULT_PROSPECTS]
+    enriched = list(enriched[:MAX_RESULT_PROSPECTS])
+    return {"prospects": enriched, "stats": stats}
 
 
 # ---------------------------------------------------------------------------
@@ -495,19 +592,20 @@ def _format_web_hit(hit: dict[str, Any]) -> str:
     return f"\u201c{quote}\u201d{(' — ' + suffix) if suffix else ''}"
 
 
-async def fetch_web_signals(prospects: list[dict[str, Any]]) -> list[dict[str, Any]]:
+async def fetch_web_signals(prospects: list[dict[str, Any]]) -> dict[str, Any]:
+    """Returns {"prospects": [...], "stats": {"signals_found": N}}."""
     async with CrustdataClient() as client:
-        async def one(p: dict[str, Any]) -> dict[str, Any]:
+        async def one(p: dict[str, Any]) -> tuple[dict[str, Any], bool]:
             name = p.get("name", "")
             company = p.get("company", "")
             if not name or not company:
-                return p
+                return p, False
             query = f'"{name}" "{company}"'
             try:
                 resp = await client.web_search(query=query, limit=3)
             except CrustdataError as e:
                 log.warning("web_search failed for %s: %s", name, e)
-                return p
+                return p, False
             hits = (
                 resp.get("results")
                 or resp.get("hits")
@@ -515,10 +613,12 @@ async def fetch_web_signals(prospects: list[dict[str, Any]]) -> list[dict[str, A
                 or []
             )
             if not hits:
-                return p
+                return p, False
             formatted = _format_web_hit(hits[0])
+            found = False
             if formatted:
                 p["recentPost"] = formatted
+                found = True
                 if not p.get("hook"):
                     snippet_short = (
                         hits[0].get("title")
@@ -526,6 +626,12 @@ async def fetch_web_signals(prospects: list[dict[str, Any]]) -> list[dict[str, A
                     )
                     if snippet_short:
                         p["hook"] = snippet_short
-            return p
+            return p, found
 
-        return list(await asyncio.gather(*[one(dict(p)) for p in prospects]))
+        results = await asyncio.gather(*[one(dict(p)) for p in prospects])
+        out_prospects = [p for p, _ in results]
+        signals_found = sum(1 for _, ok in results if ok)
+        return {
+            "prospects": out_prospects,
+            "stats": {"signals_found": signals_found},
+        }

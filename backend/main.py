@@ -22,6 +22,7 @@ from llm import generate_outreach, parse_query, score_prospect  # noqa: E402
 from pipeline import fetch_web_signals, run_enrich  # noqa: E402
 from schemas import (  # noqa: E402
     EnrichRequest,
+    EnrichResponse,
     Filters,
     OutreachRequest,
     OutreachResponse,
@@ -30,6 +31,7 @@ from schemas import (  # noqa: E402
     ScoreRequest,
     ScoreResponse,
     WebSignalsRequest,
+    WebSignalsResponse,
 )
 
 logging.basicConfig(
@@ -72,29 +74,35 @@ async def api_parse_query(req: ParseQueryRequest) -> Filters:
     return Filters(**data)
 
 
-@app.post("/api/enrich", response_model=list[Prospect])
-async def api_enrich(req: EnrichRequest) -> list[Prospect]:
+@app.post("/api/enrich", response_model=EnrichResponse)
+async def api_enrich(req: EnrichRequest) -> EnrichResponse:
     try:
-        rows = await run_enrich(req.filters.model_dump())
+        result = await run_enrich(req.filters.model_dump())
     except CrustdataError as e:
         log.exception("Crustdata enrich failed")
         raise _http_from_crustdata(e) from e
     except RuntimeError as e:
         raise _http_from_runtime(e) from e
-    return [Prospect(**row) for row in rows]
+    return EnrichResponse(
+        prospects=[Prospect(**row) for row in result.get("prospects", [])],
+        stats=result.get("stats", {}),
+    )
 
 
-@app.post("/api/web-signals", response_model=list[Prospect])
-async def api_web_signals(req: WebSignalsRequest) -> list[Prospect]:
+@app.post("/api/web-signals", response_model=WebSignalsResponse)
+async def api_web_signals(req: WebSignalsRequest) -> WebSignalsResponse:
     raw = [p.model_dump(by_alias=True) for p in req.prospects]
     try:
-        rows = await fetch_web_signals(raw)
+        result = await fetch_web_signals(raw)
     except CrustdataError as e:
         log.exception("Crustdata web-signals failed")
         raise _http_from_crustdata(e) from e
     except RuntimeError as e:
         raise _http_from_runtime(e) from e
-    return [Prospect(**row) for row in rows]
+    return WebSignalsResponse(
+        prospects=[Prospect(**row) for row in result.get("prospects", [])],
+        stats=result.get("stats", {}),
+    )
 
 
 @app.post("/api/score", response_model=ScoreResponse)

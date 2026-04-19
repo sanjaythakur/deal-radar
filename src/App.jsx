@@ -14,6 +14,7 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [showOutreach, setShowOutreach] = useState(false);
   const [error, setError] = useState(null);
+  const [progress, setProgress] = useState({});
 
   const apiDoneRef = useRef(false);
   const animDoneRef = useRef(false);
@@ -31,12 +32,13 @@ export default function App() {
     setSelected(null);
     setShowOutreach(false);
     setError(null);
+    setProgress({});
     apiDoneRef.current = false;
     animDoneRef.current = false;
     setPhase('reasoning');
 
     try {
-      const results = await runDealRadar(q);
+      const results = await runDealRadar(q, setProgress);
       setProspects(results);
     } catch (err) {
       console.error('Deal-Radar pipeline failed', err);
@@ -71,6 +73,7 @@ export default function App() {
     setSelected(null);
     setShowOutreach(false);
     setError(null);
+    setProgress({});
     apiDoneRef.current = false;
     animDoneRef.current = false;
   };
@@ -107,7 +110,7 @@ export default function App() {
             <div className="leading-tight">
               <div className="font-semibold tracking-tight text-zinc-100">Deal-Radar</div>
               <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">
-                v0.1 · mock
+                v0.2 · live
               </div>
             </div>
           </button>
@@ -135,6 +138,7 @@ export default function App() {
           <AgentReasoning
             onComplete={handleReasoningComplete}
             collapsed={reasoningCollapsed}
+            progress={progress}
           />
         )}
 
@@ -189,7 +193,7 @@ export default function App() {
         )}
 
         <footer className="pt-8 pb-2 text-center text-[11px] font-mono text-zinc-600">
-          mock phase · all API and LLM calls stubbed
+          live · Crustdata + OpenAI
         </footer>
       </main>
     </div>

@@ -56,25 +56,56 @@ valid JSON. Only include fields that the user's query actually constrains."""
 
 PARSE_USER_TEMPLATE = """Query: {query}
 
-Respond with a JSON object with these keys (omit a field if not implied):
-- titles: array of 1-5 likely job titles (strings)
-- industries: array of 1-3 industry labels (strings, e.g. "Hospitality")
-- regions: array of 1-3 human-readable region names (strings, e.g. "Southeast Asia")
-- country_iso3: single ISO-3 country code if a single country is implied (e.g. "THA"), else null
-- keywords: array of 1-5 short topical keywords mentioned (strings)
-- companies: array of specific company names if the user named any, else []
+The downstream search is Crustdata. Match its constraints exactly.
+
+Respond with a JSON object with these keys (omit / leave empty if not implied):
+
+- title_keyword: SINGLE regex/contains pattern for the role's *noun* (no
+  seniority words). Pipes mean OR. Examples:
+    "VP Revenue at hotels"      -> "Revenue"
+    "Head of Marketing"          -> "Marketing"
+    "Director of Pricing"        -> "Pricing|Yield"
+    "VP of Sales or RevOps"      -> "Sales|Revenue Operations|RevOps"
+  Keep it short and high-recall — broader is better.
+
+- seniority_levels: array drawn ONLY from this Crustdata enum:
+    ["CXO", "Vice President", "Director", "Owner / Partner",
+     "Experienced Manager", "Strategic", "Senior",
+     "Entry Level Manager", "Entry Level", "In Training"]
+  Map intelligently. Examples: "VP" -> ["Vice President","Director","CXO"],
+  "C-suite" -> ["CXO","Vice President"], "Director" -> ["Director","Vice President"].
+  Default to ["Vice President","Director","CXO"] if unspecified but the role
+  sounds senior.
+
+- industries: array of 1-3 Crustdata industry labels. Use canonical LinkedIn
+  industry names. Examples:
+    hotels / hospitality       -> ["Hospitality"]
+    fintech                    -> ["Financial Services"]
+    SaaS / software            -> ["Software Development"]
+    e-commerce / retail        -> ["Retail","Consumer Services"]
+
+- countries_iso3: ISO-3 codes for any country / region. Examples:
+    "Southeast Asia" -> ["THA","SGP","MYS","IDN","PHL","VNM"]
+    "DACH"           -> ["DEU","AUT","CHE"]
+    "US"             -> ["USA"]
+  Empty array if no geo is implied.
+
+- companies: array of specific company names if the user named any, else [].
+
+- keywords: array of 1-5 short topical keywords (used for web-signal
+  searches, not for filtering).
 
 Return JSON only. No prose."""
 
 
 async def parse_query(query: str) -> dict[str, Any]:
     data = await _chat_json(PARSE_SYSTEM, PARSE_USER_TEMPLATE.format(query=query))
-    data.setdefault("titles", [])
+    data.setdefault("title_keyword", "")
+    data.setdefault("seniority_levels", [])
     data.setdefault("industries", [])
-    data.setdefault("regions", [])
     data.setdefault("keywords", [])
     data.setdefault("companies", [])
-    data.setdefault("country_iso3", None)
+    data.setdefault("countries_iso3", [])
     data["raw"] = query
     return data
 

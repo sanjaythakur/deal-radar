@@ -1,8 +1,9 @@
-// All five scaffold functions now hit the FastAPI backend
-// (backend/main.py). The frontend never sees the Crustdata or OpenAI keys.
+// All five scaffold functions hit the FastAPI backend (backend/main.py),
+// which owns both the Crustdata and OpenAI keys.
 //
 // runDealRadar() preserves its 5-step shape so the agent-reasoning panel
-// keeps its rhythm.
+// keeps its rhythm. It also takes an optional onProgress callback that
+// receives real per-stage counts as they arrive.
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -48,12 +49,12 @@ export async function parseQueryToFilters(naturalLanguageQuery) {
   return withFloor(postJSON('/api/parse-query', { query: naturalLanguageQuery }));
 }
 
-// Returns array of enriched prospect objects
+// Returns { prospects, stats: { companies_matched, candidates_found, profiles_enriched } }
 export async function runEnrichmentPipeline(filters) {
   return withFloor(postJSON('/api/enrich', { filters }));
 }
 
-// Returns prospects with recentPost / hook filled from web search
+// Returns { prospects (with recentPost/hook filled), stats: { signals_found } }
 export async function fetchWebSignals(prospects) {
   return withFloor(postJSON('/api/web-signals', { prospects }));
 }
@@ -72,17 +73,36 @@ export async function generateOutreach(prospect) {
   return postJSON('/api/outreach', { prospect });
 }
 
-// Top-level orchestrator: query in, ranked prospects out
-export async function runDealRadar(query) {
-  const filters = await parseQueryToFilters(query);
+// Top-level orchestrator: query in, ranked prospects out.
+// onProgress(partialStats) is called after each stage with the cumulative
+// stats known so far, so the agent-reasoning panel can render real counts.
+export async function runDealRadar(query, onProgress) {
+  const stats = {};
+  const emit = () => onProgress?.({ ...stats });
 
-  let prospects = await runEnrichmentPipeline(filters);
-  prospects = await fetchWebSignals(prospects);
+  const filters = await parseQueryToFilters(query);
+  stats.parsed = true;
+  emit();
+
+  const enrichResult = await runEnrichmentPipeline(filters);
+  Object.assign(stats, enrichResult.stats || {});
+  emit();
+
+  const webResult = await fetchWebSignals(enrichResult.prospects || []);
+  Object.assign(stats, webResult.stats || {});
+  emit();
+
+  const enriched = webResult.prospects || [];
 
   const scores = await Promise.all(
-    prospects.map((p) => scoreProspect(p, p.raw_signals).catch(() => 0))
+    enriched.map((p) => scoreProspect(p, p.raw_signals).catch(() => 0))
   );
-  prospects = prospects.map((p, i) => ({ ...p, score: scores[i] }));
+  const scored = enriched.map((p, i) => ({ ...p, score: scores[i] }));
+  stats.scored = scored.length;
+  emit();
 
-  return [...prospects].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  stats.prospects_ready = scored.length;
+  emit();
+
+  return [...scored].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }

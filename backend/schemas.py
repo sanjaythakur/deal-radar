@@ -7,11 +7,11 @@ from pydantic import BaseModel, Field
 
 class Filters(BaseModel):
     raw: str = ""
-    titles: list[str] = Field(default_factory=list)
+    title_keyword: str = ""
+    seniority_levels: list[str] = Field(default_factory=list)
     industries: list[str] = Field(default_factory=list)
-    regions: list[str] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)
-    country_iso3: Optional[str] = None
+    countries_iso3: list[str] = Field(default_factory=list)
     companies: list[str] = Field(default_factory=list)
 
 
@@ -57,6 +57,16 @@ class ScoreRequest(BaseModel):
 
 class ScoreResponse(BaseModel):
     score: int
+
+
+class EnrichResponse(BaseModel):
+    prospects: list[Prospect]
+    stats: dict[str, int] = Field(default_factory=dict)
+
+
+class WebSignalsResponse(BaseModel):
+    prospects: list[Prospect]
+    stats: dict[str, int] = Field(default_factory=dict)
 
 
 class OutreachRequest(BaseModel):

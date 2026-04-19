@@ -175,5 +175,7 @@ class CrustdataClient:
     # --- web -------------------------------------------------------------
 
     async def web_search(self, *, query: str, limit: int = 5) -> dict[str, Any]:
+        # NOTE: live endpoint is /screener/web-search (the /web/search path
+        # listed elsewhere returns 404).
         payload = {"query": query, "limit": limit}
-        return await self._post("/web/search", payload)
+        return await self._post("/screener/web-search", payload)
