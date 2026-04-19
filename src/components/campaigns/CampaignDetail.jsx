@@ -31,6 +31,10 @@ function triggerDownload(filename, content, mime) {
   URL.revokeObjectURL(url);
 }
 
+function joinList(arr) {
+  return Array.isArray(arr) ? arr.filter(Boolean).join('; ') : '';
+}
+
 function buildLeadsCsv(campaign) {
   const headers = [
     'Name',
@@ -41,6 +45,15 @@ function buildLeadsCsv(campaign) {
     'Status',
     'Status Updated',
     'Notes',
+    'Work Email',
+    'Personal Email',
+    'Phone',
+    'LinkedIn URL',
+    'Company Domain',
+    'All Work Emails',
+    'All Personal Emails',
+    'All Phones',
+    'Websites',
     'Added At',
   ];
   const rows = campaign.leads.map((l) =>
@@ -53,6 +66,15 @@ function buildLeadsCsv(campaign) {
       l.status,
       l.statusUpdatedAt,
       l.notes,
+      (l.business_emails && l.business_emails[0]) || '',
+      (l.personal_emails && l.personal_emails[0]) || '',
+      (l.phone_numbers && l.phone_numbers[0]) || '',
+      l.profile_url || '',
+      l.company_domain || '',
+      joinList(l.business_emails),
+      joinList(l.personal_emails),
+      joinList(l.phone_numbers),
+      joinList(l.websites),
       l.addedAt,
     ]
       .map(csvEscape)

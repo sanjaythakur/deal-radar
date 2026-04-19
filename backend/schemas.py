@@ -31,9 +31,9 @@ class Prospect(BaseModel):
     talking_points: list[str] = Field(default_factory=list, alias="talkingPoints")
     email_subject: str = Field(default="", alias="emailSubject")
     email_body: str = Field(default="", alias="emailBody")
-    business_emails: list[str] = Field(default_factory=list, alias="businessEmails")
-    personal_emails: list[str] = Field(default_factory=list, alias="personalEmails")
-    phone_numbers: list[str] = Field(default_factory=list, alias="phoneNumbers")
+    business_emails: list[str] = Field(default_factory=list)
+    personal_emails: list[str] = Field(default_factory=list)
+    phone_numbers: list[str] = Field(default_factory=list)
     websites: list[str] = Field(default_factory=list)
     raw_signals: dict[str, Any] = Field(default_factory=dict)
 
