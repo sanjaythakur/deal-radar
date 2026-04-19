@@ -26,6 +26,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-dealradar}
       POSTGRES_USER: ${POSTGRES_USER:-dealradar}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dealradar}
+    # Bind to 127.0.0.1 so a local `npm run dev` can reach Postgres at
+    # localhost:5432 without exposing it to the LAN/internet.
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - dealradar-db:/var/lib/postgresql/data
     healthcheck:
