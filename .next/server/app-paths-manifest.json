@@ -1,0 +1,5 @@
+{
+  "/api/outreach/route": "app/api/outreach/route.js",
+  "/api/campaigns/[id]/leads/[prospectId]/route": "app/api/campaigns/[id]/leads/[prospectId]/route.js",
+  "/page": "app/page.js"
+}
